@@ -44,8 +44,8 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/universit
 // Schéma Étudiant
 const studentSchema = new mongoose.Schema({
   ip: { type: String, required: true, unique: true },
-  firstName: { type: String, required: true },
-  lastName: { type: String, required: true },
+  firstName: { type: String },
+  lastName: { type: String },
   phone: { type: String, required: true },
   level: { type: String, enum: ['L1', 'L2', 'L3', 'M1', 'M2'], required: true },
   specialization: { 
