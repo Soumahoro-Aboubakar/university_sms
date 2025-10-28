@@ -185,8 +185,20 @@ async function sendSMS(phone, message) {
     });
 
     console.log("Message envoyé :", response.data);
+      return {
+      success: true,
+      phone,
+      data: response.data
+    };
+
   } catch (error) {
+
     console.error("Erreur en envoyant le SMS :", error.response ? error.response.data : error.message);
+    return {
+      success: false,
+      phone,
+      error: error.response ? error.response.data : error.message
+    };
   }
 }
 
