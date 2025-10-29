@@ -92,14 +92,16 @@ const adminSchema = new mongoose.Schema({
 const Admin = mongoose.model('Admin', adminSchema);
 
 // Schéma Historique SMS
+const recipientSchema = new mongoose.Schema({
+  name: { type: String },
+  phone: { type: String },
+  type: { type: String },
+  ip: { type: String }
+}, { _id: false });
+
 const smsHistorySchema = new mongoose.Schema({
   message: { type: String, required: true },
-  recipients: [{
-    name: String,
-    phone: String,
-    type: String,
-    ip: String
-  }],
+  recipients: [recipientSchema], // ✅ Utilisation du sous-schéma
   sentBy: { type: String, required: true },
   recipientCount: { type: Number, required: true },
   status: { type: String, enum: ['sent', 'failed', 'pending'], default: 'sent' },
@@ -488,7 +490,7 @@ app.get('/api/admin/statistics', authenticateToken, authenticateAdmin, async (re
 // ============================================
 // ROUTES SMS
 // ============================================
-
+/*
 // Envoyer un SMS
 app.post('/api/sms/send', authenticateToken, authenticateAdmin, async (req, res) => {
   try {
@@ -546,7 +548,66 @@ app.post('/api/sms/send', authenticateToken, authenticateAdmin, async (req, res)
     console.error('Erreur envoi SMS:', error);
     res.status(500).json({ error: 'Erreur lors de l\'envoi des SMS' });
   }
+});*/
+
+app.post('/api/sms/send', authenticateToken, authenticateAdmin, async (req, res) => {
+  try {
+    const { message, selectedUserIds } = req.body;
+
+    if (!message || !selectedUserIds || selectedUserIds.length === 0) {
+      return res.status(400).json({ error: 'Message et destinataires requis' });
+    }
+
+    // Récupérer les destinataires
+    const students = await Student.find({ _id: { $in: selectedUserIds.filter(id => id.type === 'student').map(id => id.id) } });
+    const teachers = await Teacher.find({ _id: { $in: selectedUserIds.filter(id => id.type === 'teacher').map(id => id.id) } });
+
+    const recipients = [
+      ...students.map(s => ({ 
+        name: `${s.firstName} ${s.lastName}`, 
+        phone: s.phone, 
+        type: 'student',
+        ip: s.ip 
+      })),
+      ...teachers.map(t => ({ 
+        name: `${t.firstName} ${t.lastName}`, 
+        phone: t.phone, 
+        type: 'teacher',
+        ip: t.ip 
+      }))
+    ];
+
+    // Envoyer les SMS
+    const sendPromises = recipients.map(recipient => 
+      sendSMS(recipient.phone, message)
+    );
+
+    const results = await Promise.all(sendPromises);
+    const successCount = results.filter(r => r.success).length;
+
+    // Enregistrer dans l'historique
+    const smsHistory = new SMSHistory({
+      message,
+      recipients, // ✅ Les données seront correctement validées maintenant
+      sentBy: req.user.email,
+      recipientCount: recipients.length,
+      status: successCount === recipients.length ? 'sent' : (successCount > 0 ? 'sent' : 'failed')
+    });
+
+    await smsHistory.save();
+
+    res.json({
+      message: 'SMS envoyés',
+      successCount,
+      totalCount: recipients.length,
+      historyId: smsHistory._id
+    });
+  } catch (error) {
+    console.error('Erreur envoi SMS:', error);
+    res.status(500).json({ error: 'Erreur lors de l\'envoi des SMS' });
+  }
 });
+
 
 // Obtenir l'historique des SMS
 app.get('/api/sms/history', authenticateToken, authenticateAdmin, async (req, res) => {
